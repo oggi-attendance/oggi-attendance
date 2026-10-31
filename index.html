@@ -336,6 +336,8 @@ function renderOwnerDash() {
   v.innerHTML = '<div class="card"><h2>All branches</h2>'+
     '<div class="sub">'+prettyDate(t)+' &middot; '+((r.branches || []).length)+' branches</div>'+
     '<button class="btn" onclick="goAddBranch()">Add branch</button>'+
+    '<button class="btn light" onclick="ownerDaily()">Day summary</button>'+
+    '<button class="btn light" onclick="ownerMonthly()">Monthly summary</button>'+
     '<button class="btn light" onclick="ownerHome()">Refresh</button>'+
     '<button class="linkish" onclick="logout()">Log out</button></div>'+
     (cards || '<div class="card"><div class="empty">No branches yet. Add one to get an invite code for its phone.</div></div>');
@@ -407,6 +409,77 @@ function ownerRevoke(i) {
     if (r && r.ok) { toast("Phone access revoked for " + b[1]); ownerHome(); }
     else toast(authFailMsg(r && r.error));
   }, function(){ toast(authFailMsg("network")); });
+}
+
+/* ---------- owner day & monthly summaries (all branches) ---------- */
+function ownerAggRows(pred) {
+  var r = ownerData;
+  var tot = {P:0,A:0,HD:0,L:0,OT:0};
+  var rows = (r.branches || []).map(function(b){
+    var bid = b[0], bn = b[1];
+    var emps = (r.employees || []).filter(function(e){ return e[3] === bid && e[2]; }).length;
+    var c = {P:0,A:0,HD:0,L:0}, ot = 0;
+    (r.attendance || []).forEach(function(a){
+      if (a[4] === bid && pred(a[0])) {
+        if (c[a[2]] != null) c[a[2]]++;
+        var x = parseFloat(a[3]); if (x > 0) ot += x;
+      }
+    });
+    ot = Math.round(ot*100)/100;
+    tot.P+=c.P; tot.A+=c.A; tot.HD+=c.HD; tot.L+=c.L; tot.OT=Math.round((tot.OT+ot)*100)/100;
+    return '<div class="row"><div class="name">'+esc(bn)+
+      '<div class="small">'+emps+' employees &middot; P '+c.P+' &middot; A '+c.A+' &middot; HD '+c.HD+' &middot; L '+c.L+' &middot; OT '+ot+'h</div></div></div>';
+  }).join("");
+  var totRow = "";
+  if ((r.branches || []).length > 1) {
+    totRow = '<div class="row"><div class="name"><strong>All branches</strong>'+
+      '<div class="small">P '+tot.P+' &middot; A '+tot.A+' &middot; HD '+tot.HD+' &middot; L '+tot.L+' &middot; OT '+tot.OT+'h</div></div></div>';
+  }
+  return { rows: rows, totRow: totRow };
+}
+
+var ownerDayCursor = null;
+function ownerDaily() {
+  header();
+  var v = document.getElementById("view");
+  if (!ownerData) { ownerHome(); return; }
+  if (!ownerDayCursor) ownerDayCursor = today();
+  var d = ownerDayCursor;
+  var agg = ownerAggRows(function(date){ return date === d; });
+  v.innerHTML = '<div class="card"><h2>Day summary</h2>'+
+    '<div class="sub">All branches &middot; '+prettyDate(d)+'</div>'+
+    '<input type="date" id="odDate" value="'+d+'" onchange="ownerDayPick(this.value)">'+
+    '<div style="height:10px"></div>'+
+    (agg.rows || '<div class="empty">No branches yet. Add one from the owner dashboard.</div>')+ agg.totRow +
+    '<div class="totals">Counts only. Overtime is recorded in hours only; no pay is calculated. Data as of last refresh.</div>'+
+    '<button class="btn light" onclick="ownerHome()">Refresh</button>'+
+    '<button class="btn light" onclick="renderOwnerDash()">Back to all branches</button></div>';
+}
+function ownerDayPick(val) {
+  if (val) { ownerDayCursor = val; ownerDaily(); }
+}
+
+var ownerMonthCursor = (function(){var d=new Date(); return {y:d.getFullYear(), m:d.getMonth()};})();
+function ownerMonthly() {
+  header();
+  var v = document.getElementById("view");
+  if (!ownerData) { ownerHome(); return; }
+  var prefix = ownerMonthCursor.y+"-"+String(ownerMonthCursor.m+1).padStart(2,"0");
+  var label = new Date(ownerMonthCursor.y, ownerMonthCursor.m, 1).toLocaleDateString("en-IN",{month:"long",year:"numeric"});
+  var agg = ownerAggRows(function(date){ return date.indexOf(prefix) === 0; });
+  v.innerHTML = '<div class="card"><div class="monthnav">'+
+    '<button onclick="shiftOwnerMonth(-1)">&larr;</button><h2>'+label+'</h2><button onclick="shiftOwnerMonth(1)">&rarr;</button></div>'+
+    '<div class="sub">Monthly summary &middot; all branches</div>'+
+    (agg.rows || '<div class="empty">No branches yet. Add one from the owner dashboard.</div>')+ agg.totRow +
+    '<div class="totals">Counts only. Overtime is recorded in hours only; no pay is calculated. Data as of last refresh.</div>'+
+    '<button class="btn light" onclick="ownerHome()">Refresh</button>'+
+    '<button class="btn light" onclick="renderOwnerDash()">Back to all branches</button></div>';
+}
+function shiftOwnerMonth(d) {
+  ownerMonthCursor.m += d;
+  if (ownerMonthCursor.m<0) { ownerMonthCursor.m=11; ownerMonthCursor.y--; }
+  if (ownerMonthCursor.m>11) { ownerMonthCursor.m=0; ownerMonthCursor.y++; }
+  ownerMonthly();
 }
 
 /* ---------- local / branch app (existing behaviour) ---------- */
