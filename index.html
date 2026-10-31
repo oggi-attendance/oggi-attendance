@@ -504,7 +504,8 @@ function home() {
   v.innerHTML =
     '<div class="card"><h2>'+prettyDate(today())+'</h2>'+
     '<div class="sub">'+n+' employee'+(n===1?"":"s")+' &middot; '+marked+' marked today</div>'+
-    '<button class="btn" onclick="goMark()">Mark today\'s attendance</button>'+
+    '<button class="btn" onclick="goMark(today())">Mark today\'s attendance</button>'+
+    '<button class="btn light" onclick="goPickDate()">Edit a past date</button>'+
     '<button class="btn light" onclick="goEmployees()">Employees ('+n+')</button>'+
     '<button class="btn light" onclick="goReport()">Today\'s report</button>'+
     '<button class="btn light" onclick="goMonthly()">Monthly summary</button></div>'+
@@ -523,6 +524,21 @@ function saveBranch() {
   var b = document.getElementById("brIn").value.trim();
   if (!b) { toast("Enter a branch name"); return; }
   state.branch = b; save(); toast("Branch saved"); home();
+}
+
+function goPickDate() {
+  header();
+  var v = document.getElementById("view");
+  v.innerHTML = '<div class="card"><h2>Edit a past date</h2>'+
+    '<div class="sub">Choose the date whose attendance you want to add or change.</div>'+
+    '<input type="date" id="pickDateIn" value="'+today()+'" max="'+today()+'">'+
+    '<button class="btn" onclick="openPickDate()">Open</button>'+
+    '<button class="btn light" onclick="home()">Back</button></div>';
+}
+function openPickDate() {
+  var val = document.getElementById("pickDateIn").value;
+  if (!val) { toast("Choose a date"); return; }
+  goMark(val);
 }
 
 function goEmployees() {
@@ -552,13 +568,16 @@ function removeEmp(id) {
   save(); toast("Removed"); pushBranch(true); goEmployees();
 }
 
-function goMark() {
+var markDate = null;
+function goMark(dateIso) {
+  if (dateIso) markDate = dateIso;
+  if (!markDate) markDate = today();
   header();
   var list = active();
   var v = document.getElementById("view");
   if (!list.length) { v.innerHTML='<div class="card"><div class="empty">Add employees first.</div><button class="btn light" onclick="goEmployees()">Go to employees</button></div>'; return; }
-  var marks = state.att[today()] || {};
-  var otDay = (state.ot && state.ot[today()]) || {};
+  var marks = state.att[markDate] || {};
+  var otDay = (state.ot && state.ot[markDate]) || {};
   var rows = list.map(function(e){
     var cur = marks[e.id] || "";
     var otVal = (otDay[e.id]!=null) ? otDay[e.id] : "";
@@ -569,11 +588,19 @@ function goMark() {
       '<div class="ot">OT hours <input type="number" inputmode="decimal" min="0" step="0.5" id="ot'+e.id+'" value="'+otVal+'"></div></div>'+
       '<div class="seg">'+seg+'</div></div>';
   }).join("");
-  v.innerHTML = '<div class="card"><h2>'+prettyDate(today())+'</h2>'+
+  v.innerHTML = '<div class="card"><h2>'+prettyDate(markDate)+'</h2>'+
     '<div class="sub">P = Present &middot; A = Absent &middot; HD = Half Day &middot; L = Leave &middot; OT = overtime hours (optional)</div>'+
+    '<input type="date" id="markDateIn" value="'+markDate+'" max="'+today()+'" onchange="changeMarkDate(this.value)">'+
+    (markDate === today() ? "" : '<div class="sub">Editing a past date. Choose Save attendance to store changes for '+prettyDate(markDate)+'.</div>')+
     rows+
     '<button class="btn" onclick="saveMarks()">Save attendance</button>'+
     '<button class="btn light" onclick="home()">Back</button></div>';
+}
+function changeMarkDate(val) {
+  if (!val) return;
+  pending = {};
+  markDate = val;
+  goMark();
 }
 var pending = {};
 function mark(id, s) {
@@ -581,7 +608,7 @@ function mark(id, s) {
   STATUS.forEach(function(x){ document.getElementById("m"+id+x[0]).className = (x[0]===s)?("on-"+x[0]):"" ; });
 }
 function saveMarks() {
-  var d = today();
+  var d = markDate || today();
   if (!state.att[d]) state.att[d] = {};
   for (var k in pending) { state.att[d][k] = pending[k]; state.changes["a|" + d + "|" + k] = true; }
   pending = {};
